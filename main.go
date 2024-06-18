@@ -8,6 +8,7 @@ import (
 	"sync"
 
 	"github.com/CRAYON-2024/worker/internal"
+	"github.com/CRAYON-2024/worker/internal/entity"
 	"github.com/joho/godotenv"
 )
 
@@ -45,31 +46,38 @@ func main() {
 
 func fetchAllUser() {
 	var wg sync.WaitGroup
-	// Loop until 10th page ( no validation, as the inferred requirement )
+
+	// Loop until 10th page (no validation, as the inferred requirement)
 	for page := 0; page < 10; page++ {
 		wg.Add(1)
-		go func(pg int) {
+		go func(page int) {
 			defer wg.Done()
-			userResponse, err := internal.FetchUsers(pg)
+			userResponse, err := internal.FetchUsers(page)
 
 			if err != nil {
 				log.Fatalf("Error fetching users: %v", err)
 			}
 
+			var innerWg sync.WaitGroup
 			for _, user := range userResponse.Data {
-				userDetail, err := internal.FetchUserDetail(user.ID)
+				innerWg.Add(1)
+				go func(user entity.UserPreview) {
+					defer innerWg.Done()
+					userDetail, err := internal.FetchUserDetail(user.ID)
 
-				if err != nil {
-					log.Fatalf("Error fetching user detail: %v", err)
-				}
+					if err != nil {
+						log.Fatalf("Error fetching user detail: %v", err)
+					}
 
-				fmt.Printf("User name %s %s %s %s %s, countUser \n", user.Title, user.FirstName, user.LastName, userDetail.Email, userDetail.Gender)
+					fmt.Printf("User name %s %s %s %s %s \n", user.Title, user.FirstName, user.LastName, userDetail.Email, userDetail.Gender)
+				}(user)
 			}
+			innerWg.Wait()
 		}(page)
 	}
-
 	wg.Wait()
 }
+
 
 func fetchAllPost() {
 	var wg sync.WaitGroup
