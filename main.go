@@ -49,9 +49,9 @@ func main() {
 	}
 
 	// Adding jobs for users
-	go fetchAllUsers(&wg, userJobs)
+	go fetchAllUsers(userJobs)
 	// Adding jobs for posts
-	go fetchAllPosts(&wg, postJobs)
+	go fetchAllPosts(postJobs)
 
 	wg.Wait()
 	// User
@@ -64,11 +64,9 @@ func userWorker(wg *sync.WaitGroup, worker int, userJob <-chan UserJob) {
 	defer wg.Done()
 
 	for job := range userJob {
-		go func(user entity.UserPreview) {
-			if err := printUserDetail(user); err != nil {
-				log.Fatalf("Error printing user detail: %v", err)
-			}
-		}(job.User)
+		if err := printUserDetail(job.User, worker); err != nil {
+			log.Fatalf("Error printing user detail: %v", err)
+		}
 	}
 }
 
@@ -76,15 +74,13 @@ func postWorker(wg *sync.WaitGroup, worker int, postJob <-chan PostJob) {
 	defer wg.Done()
 
 	for job := range postJob {
-		go func(post entity.PostPreview) {
-			if err := printPostDetail(post); err != nil {
-				log.Fatalf("Error printing user detail: %v", err)
-			}
-		}(job.Post)
+		if err := printPostDetail(job.Post, worker); err != nil {
+			log.Fatalf("Error printing user detail: %v", err)
+		}
 	}
 }
 
-func fetchAllUsers(wg *sync.WaitGroup, userJob chan<- UserJob) error {
+func fetchAllUsers(userJob chan<- UserJob) error {
 	// Loop until 10th page (no validation, as the inferred requirement)
 	defer close(userJob)
 
@@ -105,27 +101,25 @@ func fetchUsersPage(page int, userJob chan<- UserJob) error {
 	}
 
 	for _, user := range userResponse.Data {
-		go func(u entity.UserPreview) {
-			userJob <- UserJob{Page: page, User: u}
-		}(user)
+		userJob <- UserJob{Page: page, User: user}
 	}
 
 	return nil
 }
 
-func printUserDetail(user entity.UserPreview) error {
+func printUserDetail(user entity.UserPreview, worker int) error {
 	userDetail, err := internal.FetchUserDetail(user.ID)
 
 	if err != nil {
 		return fmt.Errorf("error printing user detail: %w", err)
 	}
 
-	fmt.Printf("User name %s %s %s %s %s \n", user.Title, user.FirstName, user.LastName, userDetail.Email, userDetail.Gender)
+	fmt.Printf("User name %s %s %s %s %s, Done by Worker: %d\n", user.Title, user.FirstName, user.LastName, userDetail.Email, userDetail.Gender, worker)
 
 	return nil
 }
 
-func fetchAllPosts(wg *sync.WaitGroup, postJob chan<- PostJob) error {
+func fetchAllPosts(postJob chan<- PostJob) error {
 	defer close(postJob)
 	// Loop until 10th page ( no validation, as the inferred requirement )
 
@@ -152,8 +146,8 @@ func fetchPostsPage(page int, postJob chan<- PostJob) error {
 	return nil
 }
 
-func printPostDetail(post entity.PostPreview) error {
-	fmt.Printf("Posted by %s %s:\n%s\n\nLikes %d Tags %v\nDate posted %s\n\n", post.Owner.FirstName, post.Owner.LastName, post.Text, post.Likes, post.Tags, post.PublishDate.Format("2006-01-02 15:04:05"))
+func printPostDetail(post entity.PostPreview, worker int) error {
+	fmt.Printf("Posted by %s %s:\n%s\n\nLikes %d Tags %v\nDate posted %s, Done by Worker: %d \n\n", post.Owner.FirstName, post.Owner.LastName, post.Text, post.Likes, post.Tags, post.PublishDate.Format("2006-01-02 15:04:05"), worker)
 
 	return nil
 }
