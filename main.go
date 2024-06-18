@@ -19,7 +19,7 @@ func main() {
 
 	err := godotenv.Load()
 	if err != nil {
-		log.Panic("Error loading .env file")
+		log.Panic("error loading .env file")
 	}
 
 	initialTime := time.Now()
@@ -29,13 +29,17 @@ func main() {
 
 	go func() {
 		defer wg.Done()
-		fetchAllUser()
+		if err := fetchAllUsers(); err != nil {
+			log.Printf("error in fetchAllUsers: %v", err)
+		}
 	}()
 
 	// Post
 	go func() {
 		defer wg.Done()
-		fetchAllPost()
+		if err := fetchAllPosts(); err != nil {
+			log.Printf("Error in fetchAllPosts: %v", err)
+		}
 	}()
 
 	wg.Wait()
@@ -44,61 +48,91 @@ func main() {
 	fmt.Printf("Time taken: %v\n", finalTime.Sub(initialTime))
 }
 
-func fetchAllUser() {
+func fetchAllUsers() error {
 	var wg sync.WaitGroup
 
 	// Loop until 10th page (no validation, as the inferred requirement)
+
 	for page := 0; page < 10; page++ {
 		wg.Add(1)
-		go func(page int) {
+		go func(pg int) {
 			defer wg.Done()
-			userResponse, err := internal.FetchUsers(page)
-
-			if err != nil {
-				log.Fatalf("Error fetching users: %v", err)
+			if err := fetchUsersPage(pg); err != nil {
+				log.Fatalf("Error fetching users page: %v", err)
 			}
-
-			var innerWg sync.WaitGroup
-			for _, user := range userResponse.Data {
-				innerWg.Add(1)
-				go func(user entity.UserPreview) {
-					defer innerWg.Done()
-					userDetail, err := internal.FetchUserDetail(user.ID)
-
-					if err != nil {
-						log.Fatalf("Error fetching user detail: %v", err)
-					}
-
-					fmt.Printf("User name %s %s %s %s %s \n", user.Title, user.FirstName, user.LastName, userDetail.Email, userDetail.Gender)
-				}(user)
-			}
-			innerWg.Wait()
 		}(page)
 	}
 	wg.Wait()
+
+	return nil
 }
 
+func fetchUsersPage(page int) error {
+	userResponse, err := internal.FetchUsers(page)
 
-func fetchAllPost() {
+	if err != nil {
+		return fmt.Errorf("error fetching users: %w", err)
+	}
+
+	var innerWg sync.WaitGroup
+
+	for _, user := range userResponse.Data {
+		innerWg.Add(1)
+		go func(u entity.UserPreview) {
+			defer innerWg.Done()
+			if error := printUserDetail(u); error != nil {
+				log.Printf("Error printing user details for user %s: %v", u.ID, err)
+			}
+		}(user)
+	}
+
+	innerWg.Wait()
+
+	return nil
+}
+
+func printUserDetail(user entity.UserPreview) error {
+	userDetail, err := internal.FetchUserDetail(user.ID)
+
+	if err != nil {
+		return fmt.Errorf("error printing user detail: %w", err)
+	}
+
+	fmt.Printf("User name %s %s %s %s %s \n", user.Title, user.FirstName, user.LastName, userDetail.Email, userDetail.Gender)
+
+	return nil
+}
+
+func fetchAllPosts() error {
 	var wg sync.WaitGroup
 	// Loop until 10th page ( no validation, as the inferred requirement )
 
 	for page := 0; page < 10; page++ {
 		wg.Add(1)
 
-		go func (pg int) {
+		go func(pg int) {
 			defer wg.Done()
-			postResponse, err := internal.FetchPosts(pg)
-
-			if err != nil {
-				log.Fatalf("Error fetching posts: %v", err)
-			}
-
-			for _, post := range postResponse.Data {
-				fmt.Printf("Posted by %s %s:\n%s\n\nLikes %d Tags %v\nDate posted %s\n\n", post.Owner.FirstName, post.Owner.LastName, post.Text, post.Likes, post.Tags, post.PublishDate.Format("2006-01-02 15:04:05"))
+			if err := fetchPostsPage(pg); err != nil {
+				log.Fatalf("Error fetching posts page: %v", err)
 			}
 		}(page)
 	}
 
 	wg.Wait()
+
+	return nil
+}
+
+func fetchPostsPage(page int) error {
+	postResponse, err := internal.FetchPosts(page)
+
+	if err != nil {
+		return fmt.Errorf("error fetching posts: %w", err)	
+	}
+
+	for _, post := range postResponse.Data {
+		fmt.Printf("Posted by %s %s:\n%s\n\nLikes %d Tags %v\nDate posted %s\n\n", post.Owner.FirstName, post.Owner.LastName, post.Text, post.Likes, post.Tags, post.PublishDate.Format("2006-01-02 15:04:05"))
+	}
+
+	return nil
 }
