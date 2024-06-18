@@ -12,9 +12,25 @@ import (
 	"github.com/joho/godotenv"
 )
 
+type UserJob struct {
+	Page int
+	User entity.UserPreview
+}
+
+type PostJob struct {
+	Page int
+	Post entity.PostPreview
+}
+
+const (
+	numOfWorkers = 5
+)
+
 func main() {
 	var (
-		wg = sync.WaitGroup{}
+		userJobs = make(chan UserJob)
+		postJobs = make(chan PostJob)
+		wg       sync.WaitGroup
 	)
 
 	err := godotenv.Load()
@@ -24,69 +40,75 @@ func main() {
 
 	initialTime := time.Now()
 
-	wg.Add(2)
-	// User
+	// Assign workers to user and posts
+	wg.Add(numOfWorkers)
 
-	go func() {
-		defer wg.Done()
-		if err := fetchAllUsers(); err != nil {
-			log.Printf("error in fetchAllUsers: %v", err)
-		}
-	}()
+	for worker := 0; worker < numOfWorkers; worker++ {
+		go userWorker(&wg, worker, userJobs)
+		go postWorker(&wg, worker, postJobs)
+	}
 
-	// Post
-	go func() {
-		defer wg.Done()
-		if err := fetchAllPosts(); err != nil {
-			log.Printf("Error in fetchAllPosts: %v", err)
-		}
-	}()
+	// Adding jobs for users
+	go fetchAllUsers(&wg, userJobs)
+	// Adding jobs for posts
+	go fetchAllPosts(&wg, postJobs)
 
 	wg.Wait()
-
+	// User
 	finalTime := time.Now()
 	fmt.Printf("Time taken: %v\n", finalTime.Sub(initialTime))
 }
 
-func fetchAllUsers() error {
-	var wg sync.WaitGroup
+func userWorker(wg *sync.WaitGroup, worker int, userJob <-chan UserJob) {
+	// job here are read only
+	defer wg.Done()
 
+	for job := range userJob {
+		go func(user entity.UserPreview) {
+			if err := printUserDetail(user); err != nil {
+				log.Fatalf("Error printing user detail: %v", err)
+			}
+		}(job.User)
+	}
+}
+
+func postWorker(wg *sync.WaitGroup, worker int, postJob <-chan PostJob) {
+	defer wg.Done()
+
+	for job := range postJob {
+		go func(post entity.PostPreview) {
+			if err := printPostDetail(post); err != nil {
+				log.Fatalf("Error printing user detail: %v", err)
+			}
+		}(job.Post)
+	}
+}
+
+func fetchAllUsers(wg *sync.WaitGroup, userJob chan<- UserJob) error {
 	// Loop until 10th page (no validation, as the inferred requirement)
+	defer close(userJob)
 
 	for page := 0; page < 10; page++ {
-		wg.Add(1)
-		go func(pg int) {
-			defer wg.Done()
-			if err := fetchUsersPage(pg); err != nil {
-				log.Fatalf("Error fetching users page: %v", err)
-			}
-		}(page)
+		if err := fetchUsersPage(page, userJob); err != nil {
+			log.Fatalf("Error fetching users page: %v", err)
+		}
 	}
-	wg.Wait()
 
 	return nil
 }
 
-func fetchUsersPage(page int) error {
+func fetchUsersPage(page int, userJob chan<- UserJob) error {
 	userResponse, err := internal.FetchUsers(page)
 
 	if err != nil {
 		return fmt.Errorf("error fetching users: %w", err)
 	}
 
-	var innerWg sync.WaitGroup
-
 	for _, user := range userResponse.Data {
-		innerWg.Add(1)
 		go func(u entity.UserPreview) {
-			defer innerWg.Done()
-			if error := printUserDetail(u); error != nil {
-				log.Printf("Error printing user details for user %s: %v", u.ID, err)
-			}
+			userJob <- UserJob{Page: page, User: u}
 		}(user)
 	}
-
-	innerWg.Wait()
 
 	return nil
 }
@@ -103,36 +125,35 @@ func printUserDetail(user entity.UserPreview) error {
 	return nil
 }
 
-func fetchAllPosts() error {
-	var wg sync.WaitGroup
+func fetchAllPosts(wg *sync.WaitGroup, postJob chan<- PostJob) error {
+	defer close(postJob)
 	// Loop until 10th page ( no validation, as the inferred requirement )
 
 	for page := 0; page < 10; page++ {
-		wg.Add(1)
-
-		go func(pg int) {
-			defer wg.Done()
-			if err := fetchPostsPage(pg); err != nil {
-				log.Fatalf("Error fetching posts page: %v", err)
-			}
-		}(page)
+		if err := fetchPostsPage(page, postJob); err != nil {
+			log.Fatalf("Error fetching posts page: %v", err)
+		}
 	}
-
-	wg.Wait()
 
 	return nil
 }
 
-func fetchPostsPage(page int) error {
+func fetchPostsPage(page int, postJob chan<- PostJob) error {
 	postResponse, err := internal.FetchPosts(page)
 
 	if err != nil {
-		return fmt.Errorf("error fetching posts: %w", err)	
+		return fmt.Errorf("error fetching posts: %w", err)
 	}
 
 	for _, post := range postResponse.Data {
-		fmt.Printf("Posted by %s %s:\n%s\n\nLikes %d Tags %v\nDate posted %s\n\n", post.Owner.FirstName, post.Owner.LastName, post.Text, post.Likes, post.Tags, post.PublishDate.Format("2006-01-02 15:04:05"))
+		postJob <- PostJob{Page: page, Post: post}
 	}
+
+	return nil
+}
+
+func printPostDetail(post entity.PostPreview) error {
+	fmt.Printf("Posted by %s %s:\n%s\n\nLikes %d Tags %v\nDate posted %s\n\n", post.Owner.FirstName, post.Owner.LastName, post.Text, post.Likes, post.Tags, post.PublishDate.Format("2006-01-02 15:04:05"))
 
 	return nil
 }
