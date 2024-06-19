@@ -7,7 +7,7 @@ import (
 
 	"sync"
 
-	"github.com/CRAYON-2024/worker/internal"
+	"github.com/CRAYON-2024/worker/internal/api"
 	"github.com/CRAYON-2024/worker/internal/entity"
 	"github.com/joho/godotenv"
 	"github.com/spf13/cobra"
@@ -77,7 +77,7 @@ func fetchAllUsers() error {
 }
 
 func fetchUsersPage(page int) error {
-	userResponse, err := internal.FetchUsers(page)
+	userResponse, err := api.FetchUsers(page)
 
 	if err != nil {
 		return fmt.Errorf("error fetching users: %w", err)
@@ -101,7 +101,7 @@ func fetchUsersPage(page int) error {
 }
 
 func printUserDetail(user entity.UserPreview) error {
-	userDetail, err := internal.FetchUserDetail(user.ID)
+	userDetail, err := api.FetchUserDetail(user.ID)
 
 	if err != nil {
 		return fmt.Errorf("error printing user detail: %w", err)
@@ -133,7 +133,7 @@ func fetchAllPosts() error {
 }
 
 func fetchPostsPage(page int) error {
-	postResponse, err := internal.FetchPosts(page)
+	postResponse, err := api.FetchPosts(page)
 
 	if err != nil {
 		return fmt.Errorf("error fetching posts: %w", err)
