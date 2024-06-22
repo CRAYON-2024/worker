@@ -1,0 +1,28 @@
+server:
+  port: 8000
+  ip: "127.0.0.1"
+
+database:
+  read:
+    connstring: "postgres://postgres:postgres@localhost:5432/handson"
+  write:
+    connstring: "postgres://postgres:postgres@localhost:5432/handson"
+
+kafka:
+  topic:
+    worker: "worker"
+    handson: "handson"
+  consumer:
+    groupID: "handson"
+    broker:
+      - localhost:9092
+
+telemetry:
+  enable: true
+  service_name: go_demo
+  environment: local
+  jaeger:
+    trace_ratio: 1
+    agent_host: 127.0.0.1
+    agent_port: 6831
+

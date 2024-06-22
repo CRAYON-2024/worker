@@ -7,7 +7,8 @@ import (
 
 	"sync"
 
-	"github.com/CRAYON-2024/worker/internal"
+	"github.com/CRAYON-2024/worker/bootstrap"
+	"github.com/CRAYON-2024/worker/internal/api"
 	"github.com/CRAYON-2024/worker/internal/entity"
 	"github.com/joho/godotenv"
 	"github.com/spf13/cobra"
@@ -27,12 +28,12 @@ var (
 	numOfWorkers int
 )
 
-func WorkerCommand() *cobra.Command {
+func WorkerCommand(container *bootstrap.Container) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "worker",
 		Short: "Command to fetch users and posts concurrently",
 		Run: func(cmd *cobra.Command, args []string) {
-			if ( numOfWorkers < 1) {
+			if numOfWorkers < 1 {
 				log.Fatalf("Number of workers must be greater than 0")
 			}
 
@@ -111,7 +112,7 @@ func fetchAllUsers(userJob chan<- UserJob) error {
 }
 
 func fetchUsersPage(page int, userJob chan<- UserJob) error {
-	userResponse, err := internal.FetchUsers(page)
+	userResponse, err := api.FetchUsers(page)
 
 	if err != nil {
 		return fmt.Errorf("error fetching users: %w", err)
@@ -125,7 +126,7 @@ func fetchUsersPage(page int, userJob chan<- UserJob) error {
 }
 
 func printUserDetail(user entity.UserPreview, worker int) error {
-	userDetail, err := internal.FetchUserDetail(user.ID)
+	userDetail, err := api.FetchUserDetail(user.ID)
 
 	if err != nil {
 		return fmt.Errorf("error printing user detail: %w", err)
@@ -150,7 +151,7 @@ func fetchAllPosts(postJob chan<- PostJob) error {
 }
 
 func fetchPostsPage(page int, postJob chan<- PostJob) error {
-	postResponse, err := internal.FetchPosts(page)
+	postResponse, err := api.FetchPosts(page)
 
 	if err != nil {
 		return fmt.Errorf("error fetching posts: %w", err)
