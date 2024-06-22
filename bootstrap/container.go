@@ -27,13 +27,14 @@ func init() {
 }
 
 type Container struct {
-	Ctx      context.Context
-	dBR      *pgx.Conn
-	dBW      *pgx.Conn
-	redis    *redis.Client
-	producer *kafka.Writer
-	consumer *kafka.Reader
-	trace    *sdktrace.TracerProvider
+	Ctx            context.Context
+	dBR            *pgx.Conn
+	dBW            *pgx.Conn
+	redis          *redis.Client
+	producer       *kafka.Writer
+	consumer       *kafka.Reader
+	workerConsumer *kafka.Reader
+	trace          *sdktrace.TracerProvider
 }
 
 func NewContainer() (res *Container) {

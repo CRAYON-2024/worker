@@ -14,6 +14,7 @@ kafka:
     handson: "handson"
   consumer:
     groupID: "handson"
+    workerGroupID: "worker"
     broker:
       - localhost:9092
 

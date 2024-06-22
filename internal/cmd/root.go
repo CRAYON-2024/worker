@@ -14,7 +14,7 @@ func Exec() {
 	root.AddCommand(
 		WorkerCommand(container),
 		RestCommand(container),
-		ProcessCommand(container),
+		ListenCommand(container),
 	)
 
 	root.Execute()

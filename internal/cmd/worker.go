@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"time"
@@ -11,7 +12,9 @@ import (
 	"github.com/CRAYON-2024/worker/internal/api"
 	"github.com/CRAYON-2024/worker/internal/entity"
 	"github.com/joho/godotenv"
+	"github.com/segmentio/kafka-go"
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 )
 
 type UserJob struct {
@@ -38,7 +41,12 @@ func WorkerCommand(container *bootstrap.Container) *cobra.Command {
 			}
 
 			initialTime := time.Now()
-			runWorker()
+			// container.GetKafkaProducer()
+			runWorker(
+				viper.GetString("kafka.topic.worker"),
+				container.GetKafkaProducer(),
+			)
+
 			finalTime := time.Now()
 			fmt.Printf("Time taken: %v\n", finalTime.Sub(initialTime))
 		},
@@ -49,11 +57,15 @@ func WorkerCommand(container *bootstrap.Container) *cobra.Command {
 	return cmd
 }
 
-func runWorker() {
+func runWorker(
+	topic string,
+	producer *kafka.Writer,
+) {
 	var (
 		userJobs = make(chan UserJob)
 		postJobs = make(chan PostJob)
 		wg       sync.WaitGroup
+		context  = context.Background()
 	)
 
 	err := godotenv.Load()
@@ -65,8 +77,8 @@ func runWorker() {
 	wg.Add(numOfWorkers)
 
 	for worker := 0; worker < numOfWorkers; worker++ {
-		go userWorker(&wg, worker, userJobs)
-		go postWorker(&wg, worker, postJobs)
+		go userWorker(context, &wg, userJobs, producer, topic)
+		go postWorker(context, &wg, postJobs, producer, topic)
 	}
 
 	// Adding jobs for users
@@ -77,23 +89,45 @@ func runWorker() {
 	wg.Wait()
 }
 
-func userWorker(wg *sync.WaitGroup, worker int, userJob <-chan UserJob) {
+func userWorker(ctx context.Context, wg *sync.WaitGroup, userJob <-chan UserJob, producer *kafka.Writer, topic string) {
 	// job here are read only
 	defer wg.Done()
 
 	for job := range userJob {
-		if err := printUserDetail(job.User, worker); err != nil {
+		message, err := printUserDetail(job.User)
+		if err != nil {
 			log.Fatalf("Error printing user detail: %v", err)
+		}
+
+		kafkaMessage := kafka.Message{
+			Topic:     topic,
+			Partition: -1,
+			Value:     []byte(message),
+		}
+
+		if err := producer.WriteMessages(ctx, kafkaMessage); err != nil {
+			log.Fatalf("Failed to write message: %v", err)
 		}
 	}
 }
 
-func postWorker(wg *sync.WaitGroup, worker int, postJob <-chan PostJob) {
+func postWorker(ctx context.Context, wg *sync.WaitGroup, postJob <-chan PostJob, producer *kafka.Writer, topic string) {
 	defer wg.Done()
 
 	for job := range postJob {
-		if err := printPostDetail(job.Post, worker); err != nil {
-			log.Fatalf("Error printing user detail: %v", err)
+		message, err := printPostDetail(job.Post)
+		if err != nil {
+			log.Fatalf("Error printing post detail: %v", err)
+		}
+
+		kafkaMessage := kafka.Message{
+			Topic:     topic,
+			Partition: -1,
+			Value:     []byte(message),
+		}
+
+		if err := producer.WriteMessages(ctx, kafkaMessage); err != nil {
+			log.Fatalf("Failed to write message: %v", err)
 		}
 	}
 }
@@ -125,16 +159,16 @@ func fetchUsersPage(page int, userJob chan<- UserJob) error {
 	return nil
 }
 
-func printUserDetail(user entity.UserPreview, worker int) error {
+func printUserDetail(user entity.UserPreview) (string, error) {
 	userDetail, err := api.FetchUserDetail(user.ID)
 
 	if err != nil {
-		return fmt.Errorf("error printing user detail: %w", err)
+		return "", fmt.Errorf("error fetching user detail: %w", err)
 	}
 
-	fmt.Printf("User name %s %s %s %s %s \n", user.Title, user.FirstName, user.LastName, userDetail.Email, userDetail.Gender)
+	message := fmt.Sprintf("User name %s %s %s %s %s \n", user.Title, user.FirstName, user.LastName, userDetail.Email, userDetail.Gender)
 
-	return nil
+	return message, nil
 }
 
 func fetchAllPosts(postJob chan<- PostJob) error {
@@ -164,8 +198,8 @@ func fetchPostsPage(page int, postJob chan<- PostJob) error {
 	return nil
 }
 
-func printPostDetail(post entity.PostPreview, worker int) error {
-	fmt.Printf("Posted by %s %s:\n%s\n\nLikes %d Tags %v\nDate posted %s\n\n", post.Owner.FirstName, post.Owner.LastName, post.Text, post.Likes, post.Tags, post.PublishDate.Format("2006-01-02 15:04:05"))
+func printPostDetail(post entity.PostPreview) (string, error) {
+	var message = "Post by " + post.Owner.FirstName + " " + post.Owner.LastName + ":\n" + post.Text + "\n\nLikes " + fmt.Sprint(post.Likes) + " Tags " + fmt.Sprint(post.Tags) + "\nDate posted " + post.PublishDate.Format("2006-01-02 15:04:05")
 
-	return nil
+	return message, nil
 }

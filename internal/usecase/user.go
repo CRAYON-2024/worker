@@ -33,8 +33,6 @@ func NewUserUseCase(userUsecaseParam UserUsecaseParam) *UserUseCase {
 }
 
 func (uc *UserUseCase) GetUser(ctx context.Context) ([]entity.CustomUser, error) {
-	log.Println("user usecase")
-
 	ctx, span := uc.Trace.Start(ctx, "use case get user")
 	defer span.End()
 
@@ -60,8 +58,8 @@ func (uc *UserUseCase) GetUser(ctx context.Context) ([]entity.CustomUser, error)
 		return nil, err
 	}
 
-	log.Println(uc.Topic)
 	message := kafka.Message{
+		Topic:     uc.Topic,
 		Partition: -1,
 		Value:     []byte(string(byt)),
 	}
