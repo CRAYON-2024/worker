@@ -40,4 +40,10 @@ type (
 		RegisterDate time.Time `json:"registerDate"`
 		UpdatedDate  time.Time `json:"updatedDate"`
 	}
+
+	CustomUser struct {
+		ID   int
+		Name string
+	}
+	
 )
